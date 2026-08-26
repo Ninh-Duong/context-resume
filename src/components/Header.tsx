@@ -1,13 +1,17 @@
 import React from 'react'
+import { useResumeStore } from '../store/useResumeStore'
 import {
   Sparkles,
   Minus,
   X,
   Square,
-  Compass
+  Compass,
+  Inbox,
 } from 'lucide-react'
 
 export const Header: React.FC = () => {
+  const { setQuickCaptureOpen } = useResumeStore()
+
   const handleMinimize = () => {
     window.electronAPI?.minimizeWindow?.()
   }
@@ -24,7 +28,13 @@ export const Header: React.FC = () => {
     window.electronAPI?.openDock?.()
   }
 
-  const handleOpenQuickCapture = () => {
+  const handleOpenQuickNote = () => {
+    setQuickCaptureOpen(true, 'note')
+    window.electronAPI?.openQuickCapture?.()
+  }
+
+  const handleOpenCheckpoint = () => {
+    setQuickCaptureOpen(true, 'checkpoint')
     window.electronAPI?.openQuickCapture?.()
   }
 
@@ -33,10 +43,10 @@ export const Header: React.FC = () => {
       {/* App Logo & Title */}
       <div className="flex items-center gap-2 min-w-0">
         <div className="flex h-5 w-5 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-indigo-500 text-slate-950 font-bold text-xs shadow-sm shrink-0">
-          M
+          N
         </div>
         <span className="text-xs font-bold tracking-tight text-slate-100 truncate">
-          Context Resume <span className="text-cyan-400 font-normal hidden sm:inline">| Mạch</span>
+          Context Resume <span className="text-cyan-400 font-normal hidden sm:inline">| Ghi chú & Mạch</span>
         </span>
       </div>
 
@@ -45,24 +55,34 @@ export const Header: React.FC = () => {
         <button
           type="button"
           onClick={handleOpenDock}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-md text-slate-300 hover:text-cyan-300 hover:bg-slate-800/80 transition-colors"
-          title="Mở Note Nổi Mini trên màn hình"
+          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-slate-300 hover:text-cyan-300 hover:bg-slate-800 transition-colors"
+          title="Mở Mini Dock nổi trên màn hình"
         >
           <Compass size={13} />
-          <span className="hidden sm:inline">Note Nổi</span>
+          <span className="hidden sm:inline">Mini Dock</span>
         </button>
 
         <button
           type="button"
-          onClick={handleOpenQuickCapture}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-colors font-medium border border-amber-500/20"
-          title="Bấm Ctrl + Alt + Space để mở nhanh từ mọi nơi"
+          onClick={handleOpenQuickNote}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 transition-colors font-medium border border-cyan-500/20"
+          title="Ghi chú nhanh vào Inbox (Ctrl + Alt + Space)"
         >
-          <Sparkles size={13} />
-          <span>Quick Capture</span>
+          <Inbox size={13} />
+          <span>Quick Note</span>
           <kbd className="hidden lg:inline-block px-1 py-0.2 bg-slate-800 text-[10px] rounded text-slate-400 font-mono">
             Ctrl+Alt+Space
           </kbd>
+        </button>
+
+        <button
+          type="button"
+          onClick={handleOpenCheckpoint}
+          className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-colors font-medium border border-amber-500/20"
+          title="Lưu Checkpoint tiến trình (Ctrl + Alt + P)"
+        >
+          <Sparkles size={13} />
+          <span>Checkpoint</span>
         </button>
       </div>
 
@@ -89,7 +109,7 @@ export const Header: React.FC = () => {
         <button
           type="button"
           onClick={handleClose}
-          className="min-h-8 min-w-8 p-1.5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded transition-colors"
+          className="min-h-8 min-w-8 p-1.5 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded transition-colors"
           title="Ẩn xuống Khay hệ thống"
           aria-label="Ẩn xuống khay hệ thống"
         >

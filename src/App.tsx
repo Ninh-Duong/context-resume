@@ -8,9 +8,10 @@ import { ResumeMapWorkspace } from './components/ResumeMapWorkspace'
 export const App: React.FC = () => {
   const {
     syncFromRemote,
-    getSuggestedResumeTask,
-    resumeTask,
+    getSuggestedResumeNote,
+    activateContext,
     setQuickCaptureOpen,
+    setQuickCaptureMode,
   } = useResumeStore()
 
   // Track window route from hash (#dock | #capture | #workspace)
@@ -24,13 +25,14 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('hashchange', handleHashChange)
   }, [])
 
-  // Listen to IPC sync events across multi-windows
+  // Dedicated capture window listener
   useEffect(() => {
     if (windowRoute === '#capture') {
       setQuickCaptureOpen(true)
     }
   }, [windowRoute, setQuickCaptureOpen])
 
+  // Listen to IPC sync events across multi-windows
   useEffect(() => {
     if ((window as any).electronAPI?.onDataSync) {
       const unsubscribe = (window as any).electronAPI.onDataSync((data: any) => {
@@ -48,12 +50,16 @@ export const App: React.FC = () => {
   useEffect(() => {
     if ((window as any).electronAPI?.onGlobalHotkeyTriggered) {
       const unsubscribe = (window as any).electronAPI.onGlobalHotkeyTriggered((action: string) => {
-        if (action === 'quick-capture' || action === 'pause-checkpoint') {
+        if (action === 'quick-capture') {
+          setQuickCaptureMode('note')
+          setQuickCaptureOpen(true)
+        } else if (action === 'pause-checkpoint') {
+          setQuickCaptureMode('checkpoint')
           setQuickCaptureOpen(true)
         } else if (action === 'quick-resume') {
-          const suggested = getSuggestedResumeTask()
+          const suggested = getSuggestedResumeNote()
           if (suggested) {
-            resumeTask(suggested.id)
+            activateContext(suggested.id)
           }
         }
       })
@@ -61,14 +67,21 @@ export const App: React.FC = () => {
         if (typeof unsubscribe === 'function') unsubscribe()
       }
     }
-  }, [getSuggestedResumeTask, resumeTask, setQuickCaptureOpen])
+  }, [getSuggestedResumeNote, activateContext, setQuickCaptureOpen, setQuickCaptureMode])
 
   // Local keyboard shortcut listeners within focused window
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl + Alt + Space: Open Quick Capture
+      // Ctrl + Alt + Space: Open Quick Note
       if (e.ctrlKey && e.altKey && e.code === 'Space') {
         e.preventDefault()
+        setQuickCaptureMode('note')
+        window.electronAPI?.openQuickCapture?.()
+      }
+      // Ctrl + Alt + P: Open Checkpoint
+      if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault()
+        setQuickCaptureMode('checkpoint')
         window.electronAPI?.openQuickCapture?.()
       }
       // Ctrl + Alt + D: Open / Toggle Dock
@@ -85,7 +98,7 @@ export const App: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [setQuickCaptureMode])
 
   // 1. DEDICATED DOCK WINDOW VIEW (#dock)
   if (windowRoute === '#dock') {
@@ -107,11 +120,7 @@ export const App: React.FC = () => {
 
   // 3. DEDICATED FULL WORKSPACE VIEW (#workspace or default)
   return (
-    <div className="relative h-screen w-screen flex flex-col overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-950/95 shadow-2xl select-none">
-      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-        <div className="absolute -left-24 -top-28 h-72 w-72 rounded-full bg-cyan-500/10 blur-3xl" />
-        <div className="absolute -bottom-32 -right-20 h-80 w-80 rounded-full bg-indigo-500/10 blur-3xl" />
-      </div>
+    <div className="relative h-screen w-screen flex flex-col overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-950 shadow-2xl select-none">
       <Header />
       <main className="relative flex-1 overflow-hidden">
         <ResumeMapWorkspace />

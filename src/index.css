@@ -2,9 +2,9 @@
 
 @layer base {
   :root {
-    --color-bg-base: #0f172a;
-    --color-surface-glass: rgba(15, 23, 42, 0.85);
-    --color-surface-border: rgba(255, 255, 255, 0.1);
+    --color-bg-base: #090d16;
+    --color-surface-glass: rgba(15, 23, 42, 0.88);
+    --color-surface-border: rgba(148, 163, 184, 0.16);
   }
 
   body {
@@ -40,16 +40,16 @@
   -webkit-app-region: no-drag;
 }
 
-/* Frosted glass surface used by the desktop note windows. */
+/* Refined frosted glass surface */
 .glass-panel {
   background:
-    linear-gradient(135deg, rgba(15, 23, 42, 0.78), rgba(15, 23, 42, 0.58)),
-    radial-gradient(circle at 0% 0%, rgba(34, 211, 238, 0.16), transparent 42%),
-    radial-gradient(circle at 100% 100%, rgba(99, 102, 241, 0.14), transparent 40%);
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  box-shadow: 0 18px 55px rgba(2, 6, 23, 0.48), 0 0 0 1px rgba(34, 211, 238, 0.06);
-  -webkit-backdrop-filter: blur(24px) saturate(145%);
-  backdrop-filter: blur(24px) saturate(145%);
+    linear-gradient(135deg, rgba(15, 23, 42, 0.88), rgba(15, 23, 42, 0.72)),
+    radial-gradient(circle at 0% 0%, rgba(34, 211, 238, 0.1), transparent 38%),
+    radial-gradient(circle at 100% 100%, rgba(99, 102, 241, 0.08), transparent 36%);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  box-shadow: 0 16px 45px rgba(2, 6, 23, 0.52), 0 0 0 1px rgba(34, 211, 238, 0.04);
+  -webkit-backdrop-filter: blur(20px) saturate(135%);
+  backdrop-filter: blur(20px) saturate(135%);
 }
 
 button:focus-visible,
@@ -62,8 +62,8 @@ select:focus-visible {
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -71,26 +71,10 @@ select:focus-visible {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.25);
+  background: rgba(148, 163, 184, 0.2);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.45);
-}
-
-/* Pulsing subtle cue */
-@keyframes subtle-pulse {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.7;
-    transform: scale(0.98);
-  }
-}
-
-.animate-subtle-pulse {
-  animation: subtle-pulse 3s infinite ease-in-out;
+  background: rgba(148, 163, 184, 0.35);
 }

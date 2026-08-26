@@ -1,10 +1,11 @@
-export type TaskStatus = 'active' | 'paused' | 'blocked' | 'completed' | 'archived'
+export type NoteType = 'note' | 'context'
+
+export type ContextStatus = 'active' | 'paused' | 'completed' | 'archived'
 
 export type StepStatus = 'done' | 'current' | 'next' | 'blocked' | 'later'
 
 export interface Step {
   id: string
-  taskId: string
   label: string
   status: StepStatus
   order: number
@@ -14,8 +15,6 @@ export interface Step {
 
 export interface Checkpoint {
   id: string
-  taskId: string
-  stepId?: string
   lastCompleted?: string
   nextAction: string
   blocker?: string
@@ -23,18 +22,38 @@ export interface Checkpoint {
   createdAt: number
 }
 
-export interface Task {
-  id: string
-  title: string
-  status: TaskStatus
-  colorTag?: string
+export interface ContextData {
+  status: ContextStatus
   steps: Step[]
   checkpoints: Checkpoint[]
-  createdAt: number
+  currentStepId?: string
   lastPausedAt?: number
   lastResumedAt?: number
   completedAt?: number
 }
+
+export interface Note {
+  id: string
+  title: string
+  content: string
+  type: NoteType
+  tags: string[]
+  pinned: boolean
+  archived: boolean
+  inInbox: boolean
+  colorTag?: string
+  createdAt: number
+  updatedAt: number
+  context?: ContextData
+}
+
+export type SidebarFilter =
+  | 'inbox'
+  | 'all'
+  | 'pinned'
+  | 'active_context'
+  | 'archived'
+  | { tag: string }
 
 export type AppViewMode = 'workspace' | 'dock' | 'spotlight'
 
@@ -89,3 +108,4 @@ declare global {
     electronAPI?: ElectronAPI
   }
 }
+

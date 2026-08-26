@@ -80,7 +80,7 @@ function saveDockPosition() {
   writeStorageFile(current)
 }
 
-// 1. FLOATING MINI NOTE DOCK (320 x 95px Default, Always On Top)
+// 1. FLOATING MINI NOTE DOCK (330 x 105px Default, Always On Top)
 function createDockWindow() {
   if (dockWindow && !dockWindow.isDestroyed()) {
     dockWindow.show()
@@ -88,8 +88,8 @@ function createDockWindow() {
     return
   }
 
-  const dockWidth = 320
-  const dockHeight = 100
+  const dockWidth = 330
+  const dockHeight = 105
   const { x, y } = getDockPosition(dockWidth, dockHeight)
 
   dockWindow = new BrowserWindow({
@@ -126,20 +126,20 @@ function createDockWindow() {
   dockWindow.on('moved', saveDockPosition)
 }
 
-// 2. QUICK CAPTURE SPOTLIGHT POPUP (400 x 150px)
-function createQuickCaptureWindow() {
+// 2. QUICK CAPTURE SPOTLIGHT POPUP (440 x 180px)
+function createQuickCaptureWindow(mode: 'quick-capture' | 'pause-checkpoint' = 'quick-capture') {
   if (captureWindow && !captureWindow.isDestroyed()) {
     captureWindow.show()
     captureWindow.focus()
-    captureWindow.webContents.send('hotkey:triggered', 'quick-capture')
+    captureWindow.webContents.send('hotkey:triggered', mode)
     return
   }
 
   const primaryDisplay = screen.getPrimaryDisplay()
   const { width: screenWidth, height: screenHeight, x: displayX, y: displayY } = primaryDisplay.workArea
 
-  const captureWidth = 400
-  const captureHeight = 155
+  const captureWidth = 440
+  const captureHeight = mode === 'pause-checkpoint' ? 220 : 180
   const x = displayX + Math.round((screenWidth - captureWidth) / 2)
   const y = displayY + Math.round(screenHeight * 0.24)
 
@@ -171,6 +171,10 @@ function createQuickCaptureWindow() {
 
   captureWindow.loadURL(url)
 
+  captureWindow.webContents.on('did-finish-load', () => {
+    captureWindow?.webContents.send('hotkey:triggered', mode)
+  })
+
   captureWindow.on('blur', () => {
     if (captureWindow && !captureWindow.isDestroyed()) {
       captureWindow.hide()
@@ -182,7 +186,7 @@ function createQuickCaptureWindow() {
   })
 }
 
-// 3. WORKSPACE DASHBOARD (960 x 640px)
+// 3. WORKSPACE DASHBOARD (1080 x 700px)
 function createWorkspaceWindow(showImmediately = false) {
   if (workspaceWindow && !workspaceWindow.isDestroyed()) {
     workspaceWindow.show()
@@ -191,10 +195,10 @@ function createWorkspaceWindow(showImmediately = false) {
   }
 
   workspaceWindow = new BrowserWindow({
-    width: 960,
-    height: 640,
-    minWidth: 360,
-    minHeight: 460,
+    width: 1080,
+    height: 700,
+    minWidth: 480,
+    minHeight: 500,
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
@@ -229,24 +233,30 @@ function createWorkspaceWindow(showImmediately = false) {
 
 // SYSTEM TRAY
 function setupTray() {
-  const traySvg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect width="32" height="32" rx="9" fill="#22d3ee"/><text x="16" y="22" text-anchor="middle" font-family="Arial" font-size="17" font-weight="700" fill="#0f172a">M</text></svg>`
+  const traySvg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect width="32" height="32" rx="9" fill="#22d3ee"/><text x="16" y="22" text-anchor="middle" font-family="Arial" font-size="17" font-weight="700" fill="#0f172a">N</text></svg>`
   const icon = nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(traySvg).toString('base64')}`)
   tray = new Tray(icon)
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Context Resume (Mạch)',
+      label: 'Context Resume (Ghi chú & Mạch)',
       enabled: false,
     },
     { type: 'separator' },
     {
-      label: '⚡ Quick Capture (Ctrl+Alt+Space)',
+      label: '⚡ Quick Note (Ctrl+Alt+Space)',
       click: () => {
-        createQuickCaptureWindow()
+        createQuickCaptureWindow('quick-capture')
       },
     },
     {
-      label: '📌 Note Nổi Mini (Dock)',
+      label: '⏸ Lưu Checkpoint (Ctrl+Alt+P)',
+      click: () => {
+        createQuickCaptureWindow('pause-checkpoint')
+      },
+    },
+    {
+      label: '📌 Mini Dock Nổi (Dock)',
       click: () => {
         if (dockWindow && !dockWindow.isDestroyed()) {
           if (dockWindow.isVisible()) dockWindow.hide()
@@ -257,7 +267,7 @@ function setupTray() {
       },
     },
     {
-      label: '🗺️ Mở Resume Map (Workspace)',
+      label: '📝 Mở Workspace Ghi Chú',
       click: () => {
         if (workspaceWindow && !workspaceWindow.isDestroyed()) {
           workspaceWindow.show()
@@ -277,7 +287,7 @@ function setupTray() {
     },
   ])
 
-  tray.setToolTip('Context Resume - Khôi phục ngữ cảnh tức thì')
+  tray.setToolTip('Context Resume - Ghi chú thông minh & Khôi phục ngữ cảnh tức thì')
   tray.setContextMenu(contextMenu)
 
   tray.on('click', () => {
@@ -293,11 +303,11 @@ function setupTray() {
 // GLOBAL SHORTCUTS
 function registerGlobalShortcuts() {
   globalShortcut.register('CommandOrControl+Alt+Space', () => {
-    createQuickCaptureWindow()
+    createQuickCaptureWindow('quick-capture')
   })
 
   globalShortcut.register('CommandOrControl+Alt+P', () => {
-    createQuickCaptureWindow()
+    createQuickCaptureWindow('pause-checkpoint')
   })
 
   globalShortcut.register('CommandOrControl+Alt+D', () => {

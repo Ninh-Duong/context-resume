@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
-// Expose protected methods that allow the renderer process to use IPC
+// Expose protected IPC methods to Renderer
 contextBridge.exposeInMainWorld('electronAPI', {
   // Window controls
   minimizeWindow: () => ipcRenderer.send('window:minimize'),
@@ -11,18 +11,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setOpacity: (opacity: number) => ipcRenderer.send('window:set-opacity', opacity),
   setIgnoreMouseEvents: (ignore: boolean, forward?: boolean) =>
     ipcRenderer.send('window:set-ignore-mouse-events', ignore, forward),
-  
-  // Navigation / Window switching
+
+  // Multi-window management
   openQuickCapture: () => ipcRenderer.send('window:open-quick-capture'),
+  closeQuickCapture: () => ipcRenderer.send('window:close-quick-capture'),
+  resizeQuickCapture: (width: number, height: number) =>
+    ipcRenderer.send('window:resize-quick-capture', width, height),
+
   openWorkspace: () => ipcRenderer.send('window:open-workspace'),
+  hideWorkspace: () => ipcRenderer.send('window:hide-workspace'),
+  toggleWorkspace: () => ipcRenderer.send('window:toggle-workspace'),
+
   openDock: () => ipcRenderer.send('window:open-dock'),
-  resizeWindow: (width: number, height: number) => ipcRenderer.send('window:resize', width, height),
-  
+  hideDock: () => ipcRenderer.send('window:hide-dock'),
+  resizeDock: (width: number, height: number) =>
+    ipcRenderer.send('window:resize-dock', width, height),
+
   // Storage & System
   saveLocalData: (key: string, data: any) => ipcRenderer.invoke('storage:save', key, data),
   loadLocalData: (key: string) => ipcRenderer.invoke('storage:load', key),
   
-  // Events from main process
+  // Cross-window Event Sync
   onGlobalHotkeyTriggered: (callback: (action: string) => void) => {
     const handler = (_event: any, action: string) => callback(action)
     ipcRenderer.on('hotkey:triggered', handler)

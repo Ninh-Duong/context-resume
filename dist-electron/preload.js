@@ -1,28 +1,35 @@
-import { contextBridge as e, ipcRenderer as t } from "electron";
+import { contextBridge, ipcRenderer } from "electron";
 //#region electron/preload.ts
-e.exposeInMainWorld("electronAPI", {
-	minimizeWindow: () => t.send("window:minimize"),
-	maximizeWindow: () => t.send("window:maximize"),
-	closeWindow: () => t.send("window:close"),
-	hideWindow: () => t.send("window:hide"),
-	setAlwaysOnTop: (e) => t.send("window:set-always-on-top", e),
-	setOpacity: (e) => t.send("window:set-opacity", e),
-	setIgnoreMouseEvents: (e, n) => t.send("window:set-ignore-mouse-events", e, n),
-	openQuickCapture: () => t.send("window:open-quick-capture"),
-	openWorkspace: () => t.send("window:open-workspace"),
-	openDock: () => t.send("window:open-dock"),
-	resizeWindow: (e, n) => t.send("window:resize", e, n),
-	saveLocalData: (e, n) => t.invoke("storage:save", e, n),
-	loadLocalData: (e) => t.invoke("storage:load", e),
-	onGlobalHotkeyTriggered: (e) => {
-		let n = (t, n) => e(n);
-		return t.on("hotkey:triggered", n), () => t.removeListener("hotkey:triggered", n);
+contextBridge.exposeInMainWorld("electronAPI", {
+	minimizeWindow: () => ipcRenderer.send("window:minimize"),
+	maximizeWindow: () => ipcRenderer.send("window:maximize"),
+	closeWindow: () => ipcRenderer.send("window:close"),
+	hideWindow: () => ipcRenderer.send("window:hide"),
+	setAlwaysOnTop: (flag) => ipcRenderer.send("window:set-always-on-top", flag),
+	setOpacity: (opacity) => ipcRenderer.send("window:set-opacity", opacity),
+	setIgnoreMouseEvents: (ignore, forward) => ipcRenderer.send("window:set-ignore-mouse-events", ignore, forward),
+	openQuickCapture: () => ipcRenderer.send("window:open-quick-capture"),
+	closeQuickCapture: () => ipcRenderer.send("window:close-quick-capture"),
+	resizeQuickCapture: (width, height) => ipcRenderer.send("window:resize-quick-capture", width, height),
+	openWorkspace: () => ipcRenderer.send("window:open-workspace"),
+	hideWorkspace: () => ipcRenderer.send("window:hide-workspace"),
+	toggleWorkspace: () => ipcRenderer.send("window:toggle-workspace"),
+	openDock: () => ipcRenderer.send("window:open-dock"),
+	hideDock: () => ipcRenderer.send("window:hide-dock"),
+	resizeDock: (width, height) => ipcRenderer.send("window:resize-dock", width, height),
+	saveLocalData: (key, data) => ipcRenderer.invoke("storage:save", key, data),
+	loadLocalData: (key) => ipcRenderer.invoke("storage:load", key),
+	onGlobalHotkeyTriggered: (callback) => {
+		const handler = (_event, action) => callback(action);
+		ipcRenderer.on("hotkey:triggered", handler);
+		return () => ipcRenderer.removeListener("hotkey:triggered", handler);
 	},
-	onDataSync: (e) => {
-		let n = (t, n) => e(n);
-		return t.on("data:sync", n), () => t.removeListener("data:sync", n);
+	onDataSync: (callback) => {
+		const handler = (_event, data) => callback(data);
+		ipcRenderer.on("data:sync", handler);
+		return () => ipcRenderer.removeListener("data:sync", handler);
 	},
-	broadcastDataSync: (e) => t.send("data:broadcast-sync", e)
+	broadcastDataSync: (data) => ipcRenderer.send("data:broadcast-sync", data)
 });
 //#endregion
 export {};

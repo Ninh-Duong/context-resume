@@ -1,41 +1,32 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useResumeStore } from '../store/useResumeStore'
 import {
   Play,
   Pause,
   CheckCircle2,
-  Maximize2,
-  ChevronDown,
-  ChevronUp,
   AlertTriangle,
   RotateCcw,
   Plus,
-  Compass,
-  Settings2,
-  Sparkles
+  Pin,
+  Minimize2,
+  MoreHorizontal,
+  Layout,
+  Sliders
 } from 'lucide-react'
 
 export const FloatingDock: React.FC = () => {
   const {
     getActiveTask,
-    getPausedTasks,
     getSuggestedResumeTask,
     resumeTask,
-    completeTask,
     toggleStepComplete,
-    addStep,
-    setQuickCaptureOpen,
-    setViewMode,
     dockSettings,
     updateDockSettings,
   } = useResumeStore()
 
-  const [isExpanded, setIsExpanded] = useState(false)
-  const [newStepText, setNewStepText] = useState('')
-  const [showSettings, setShowSettings] = useState(false)
+  const [showMenu, setShowMenu] = useState(false)
 
   const activeTask = getActiveTask()
-  const pausedTasks = getPausedTasks()
   const suggestedResume = getSuggestedResumeTask()
 
   const currentStep = activeTask?.steps.find((s) => s.status === 'current')
@@ -43,270 +34,244 @@ export const FloatingDock: React.FC = () => {
   const activeAction = currentStep || nextStep || activeTask?.steps.find((s) => s.status !== 'done')
   const latestCheckpoint = activeTask?.checkpoints?.[0]
 
+  const handleToggleMenu = () => {
+    const nextOpen = !showMenu
+    setShowMenu(nextOpen)
+    window.electronAPI?.resizeDock?.(320, nextOpen ? 260 : 100)
+  }
+
+  // Resize window when toggling bubble mode
+  const handleToggleBubbleMode = () => {
+    const nextBubble = !dockSettings.bubbleMode
+    updateDockSettings({ bubbleMode: nextBubble })
+    setShowMenu(false)
+    if (nextBubble) {
+      window.electronAPI?.resizeDock?.(50, 50)
+    } else {
+      window.electronAPI?.resizeDock?.(320, 100)
+    }
+  }
+
   const handleAdvanceStep = () => {
     if (activeTask && activeAction) {
       toggleStepComplete(activeTask.id, activeAction.id)
     }
   }
 
-  const handleAddInlineStep = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (activeTask && newStepText.trim()) {
-      addStep(activeTask.id, newStepText.trim(), 'next')
-      setNewStepText('')
-    }
+  const handleOpenQuickCapture = () => {
+    setShowMenu(false)
+    window.electronAPI?.resizeDock?.(320, 100)
+    window.electronAPI?.openQuickCapture?.()
   }
 
+  const handleOpenWorkspace = () => {
+    setShowMenu(false)
+    window.electronAPI?.resizeDock?.(320, 100)
+    window.electronAPI?.openWorkspace?.()
+  }
+
+  const handleTogglePin = () => {
+    const nextPin = !dockSettings.alwaysOnTop
+    updateDockSettings({ alwaysOnTop: nextPin })
+    window.electronAPI?.setAlwaysOnTop?.(nextPin)
+  }
+
+  useEffect(() => {
+    window.electronAPI?.setOpacity?.(dockSettings.opacity)
+    window.electronAPI?.setAlwaysOnTop?.(dockSettings.alwaysOnTop)
+  }, [dockSettings.opacity, dockSettings.alwaysOnTop])
+
+  // ==========================================
+  // 1. THU GỌN: MINI FLOATING BUBBLE (44-48px)
+  // ==========================================
+  if (dockSettings.bubbleMode) {
+    return (
+      <div
+        onClick={handleToggleBubbleMode}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            handleToggleBubbleMode()
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-label={activeTask ? `Mở note ${activeTask.title}` : 'Mở Context Resume note'}
+        className="glass-panel drag-region group relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-2xl transition-all duration-150 hover:scale-105 hover:border-cyan-300"
+        title={activeTask ? `Đang làm: ${activeTask.title} (Bấm để mở Note)` : 'Context Resume Note (Bấm để mở)'}
+      >
+        <span className="flex h-3 w-3 rounded-full bg-cyan-400 animate-ping" />
+        <span className="absolute flex h-3.5 w-3.5 rounded-full bg-cyan-400 shadow-md shadow-cyan-400/60" />
+      </div>
+    )
+  }
+
+  // ==========================================
+  // 2. MỞ RỘNG: DESKTOP MINI NOTE (320 x 95px)
+  // ==========================================
   return (
     <div
-      className="flex flex-col items-center justify-center p-4 min-h-screen bg-slate-950/40 backdrop-blur-sm"
-      style={{ opacity: dockSettings.opacity }}
+      className="h-full w-full select-none text-slate-100 transition-all duration-150"
     >
-      {/* Floating HUD Container */}
-      <div
-        className={`w-full max-w-md transition-all duration-300 rounded-2xl border border-slate-700/60 bg-slate-900/95 shadow-2xl backdrop-blur-xl overflow-hidden text-slate-100 flex flex-col ${
-          isExpanded ? 'ring-1 ring-cyan-500/30' : ''
-        }`}
-      >
-        {/* Header / Drag Bar */}
-        <div className="drag-region flex items-center justify-between px-3.5 py-2.5 bg-slate-800/80 border-b border-slate-800 cursor-move">
-          <div className="flex items-center gap-2">
-            <span className="flex h-2.5 w-2.5 rounded-full bg-cyan-400 animate-ping" />
-            <span className="text-xs font-semibold tracking-wide text-slate-300 uppercase">
-              Context Resume Dock
-            </span>
+      <div className="glass-panel h-full rounded-2xl overflow-hidden ring-1 ring-cyan-400/20 p-2.5 space-y-2">
+        {/* TOP ROW: Task Name & Menu Button */}
+        <div className="drag-region flex items-center justify-between gap-2 cursor-move">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="flex h-2.5 w-2.5 rounded-full bg-cyan-400 animate-pulse shrink-0" />
+            <h3 className="text-[14px] font-bold text-slate-100 truncate tracking-tight">
+              {activeTask ? activeTask.title : 'Chưa có Task'}
+            </h3>
           </div>
 
-          <div className="no-drag flex items-center gap-1.5">
+          <div className="no-drag flex items-center gap-1 shrink-0 relative">
             <button
-              onClick={() => setShowSettings(!showSettings)}
-              className="p-1 hover:bg-slate-700/60 rounded-md text-slate-400 hover:text-slate-200 transition-colors"
-              title="Cài đặt Dock"
+              type="button"
+              onClick={handleToggleMenu}
+              className="p-1 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded-lg transition-colors"
+              title="Tùy chọn khác"
+              aria-label="Options menu"
+              aria-expanded={showMenu}
             >
-              <Settings2 size={13} />
+              <MoreHorizontal size={15} />
             </button>
-            <button
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="p-1 hover:bg-slate-700/60 rounded-md text-slate-400 hover:text-slate-200 transition-colors"
-              title={isExpanded ? 'Thu gọn' : 'Mở rộng'}
-            >
-              {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-            </button>
-            <button
-              onClick={() => setViewMode('workspace')}
-              className="p-1 hover:bg-cyan-500/20 text-cyan-400 rounded-md transition-colors"
-              title="Mở toàn bộ Resume Map Workspace"
-            >
-              <Maximize2 size={13} />
-            </button>
+
+            {/* Menu Popover */}
+            {showMenu && (
+              <div className="absolute right-0 top-6 z-50 w-44 rounded-xl border border-slate-700 bg-slate-950 p-1.5 shadow-2xl text-xs space-y-1 animate-in fade-in zoom-in-95 duration-100">
+                <button
+                  type="button"
+                  onClick={handleOpenWorkspace}
+                  className="flex w-full items-center gap-2 px-2 py-1.5 rounded-lg text-slate-200 hover:bg-slate-800 text-left transition-colors"
+                >
+                  <Layout size={13} className="text-cyan-400" />
+                  <span>Mở Sơ Đồ Chi Tiết</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleTogglePin}
+                  className="flex w-full items-center justify-between px-2 py-1.5 rounded-lg text-slate-200 hover:bg-slate-800 text-left transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Pin size={13} className={dockSettings.alwaysOnTop ? 'text-cyan-400' : 'text-slate-400'} />
+                    <span>Ghim Luôn Nổi</span>
+                  </div>
+                  <span className="text-[10px] text-slate-500">{dockSettings.alwaysOnTop ? 'Bật' : 'Tắt'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleToggleBubbleMode}
+                  className="flex w-full items-center gap-2 px-2 py-1.5 rounded-lg text-slate-200 hover:bg-slate-800 text-left transition-colors"
+                >
+                  <Minimize2 size={13} className="text-indigo-400" />
+                  <span>Thu Nhỏ Thành Bubble</span>
+                </button>
+
+                <div className="pt-1 border-t border-slate-800 px-2 py-1 space-y-1">
+                  <div className="flex items-center justify-between text-[11px] text-slate-400">
+                    <span className="flex items-center gap-1"><Sliders size={11} /> Độ mờ</span>
+                    <span>{Math.round(dockSettings.opacity * 100)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.3"
+                    max="1.0"
+                    step="0.05"
+                    value={dockSettings.opacity}
+                    onChange={(e) => updateDockSettings({ opacity: parseFloat(e.target.value) })}
+                    className="w-full accent-cyan-400 cursor-pointer h-1"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Settings Sub-panel if toggled */}
-        {showSettings && (
-          <div className="px-3.5 py-2.5 bg-slate-950/80 border-b border-slate-800 text-xs space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-slate-400">Độ trong suốt (Opacity):</span>
-              <input
-                type="range"
-                min="0.4"
-                max="1.0"
-                step="0.05"
-                value={dockSettings.opacity}
-                onChange={(e) => updateDockSettings({ opacity: parseFloat(e.target.value) })}
-                className="w-24 accent-cyan-400 cursor-pointer"
-              />
-            </div>
-            <div className="flex items-center justify-between text-slate-400">
-              <span>Phím tắt nhanh:</span>
-              <span className="font-mono bg-slate-800 px-1.5 py-0.5 rounded text-cyan-300">
-                Ctrl + Alt + Space
+        {/* MIDDLE & ACTION ROW: Next Action & 2 Big Action Buttons */}
+        {activeTask ? (
+          <div className="flex items-center justify-between gap-2.5">
+            {/* NEXT Action (High Contrast, Big Text) */}
+            <div className="min-w-0 flex-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-cyan-400 block leading-tight">
+                Tiếp theo
               </span>
+              <button
+                type="button"
+                className="block w-full text-left text-[13px] font-semibold text-slate-100 truncate leading-snug cursor-pointer hover:text-cyan-200"
+                onClick={handleOpenQuickCapture}
+                title={activeAction ? activeAction.label : 'Bấm để thêm bước'}
+              >
+                {activeAction ? activeAction.label : 'Bấm để thêm bước tiếp theo'}
+              </button>
+
+              {/* Blocker alert if present */}
+              {latestCheckpoint?.blocker && (
+                <div className="flex items-center gap-1 text-[11px] text-amber-300 truncate mt-0.5">
+                  <AlertTriangle size={11} className="text-amber-400 shrink-0" />
+                  <span className="truncate">{latestCheckpoint.blocker}</span>
+                </div>
+              )}
             </div>
+
+            {/* ACTION BUTTONS (Fitts's Law Target >= 34px) */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={handleAdvanceStep}
+                className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/30 transition-transform active:scale-95 shadow-sm"
+                title="Hoàn thành bước này (✓)"
+                aria-label="Complete step"
+              >
+                <CheckCircle2 size={18} />
+              </button>
+
+              <button
+                type="button"
+                onClick={handleOpenQuickCapture}
+                className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/30 transition-transform active:scale-95 shadow-sm"
+                title="Tạm dừng & Checkpoint (⏸)"
+                aria-label="Pause and Checkpoint"
+              >
+                <Pause size={16} />
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* Empty State or Resume Suggestion */
+          <div className="flex items-center justify-between gap-2 py-0.5">
+            {suggestedResume ? (
+              <div className="flex items-center justify-between w-full gap-2 min-w-0">
+                <div className="min-w-0">
+                  <span className="text-[10px] uppercase font-bold text-indigo-400 flex items-center gap-1">
+                    <RotateCcw size={10} /> Task chờ
+                  </span>
+                  <p className="text-xs font-semibold text-slate-200 truncate">
+                    {suggestedResume.title}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => resumeTask(suggestedResume.id)}
+                  className="px-3 py-1.5 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-xs flex items-center gap-1 transition-colors shrink-0 shadow"
+                >
+                  <Play size={12} /> Tiếp tục
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between w-full">
+                <span className="text-xs text-slate-400">Không có task active.</span>
+                <button
+                  type="button"
+                  onClick={handleOpenQuickCapture}
+                  className="px-3 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center gap-1 transition-colors shadow"
+                >
+                  <Plus size={13} /> Tạo Task
+                </button>
+              </div>
+            )}
           </div>
         )}
-
-        {/* Main Body */}
-        <div className="p-3.5 space-y-3">
-          {activeTask ? (
-            <div>
-              {/* Active Task Name & Status Pill */}
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                      Đang làm
-                    </span>
-                    <span className="text-xs text-slate-400 truncate">
-                      {activeTask.checkpoints.length > 0 ? `Đã lưu ${activeTask.checkpoints.length} checkpoint` : 'Mới bắt đầu'}
-                    </span>
-                  </div>
-                  <h3 className="text-sm font-semibold text-slate-100 truncate" title={activeTask.title}>
-                    {activeTask.title}
-                  </h3>
-                </div>
-
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    onClick={() => setQuickCaptureOpen(true)}
-                    className="p-1.5 rounded-lg bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/30 transition-all text-xs flex items-center gap-1"
-                    title="Tạm dừng & Lưu Checkpoint (Ctrl+Alt+P)"
-                  >
-                    <Pause size={13} />
-                    <span className="hidden sm:inline">Pause</span>
-                  </button>
-                  <button
-                    onClick={() => completeTask(activeTask.id)}
-                    className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30 transition-all text-xs flex items-center gap-1"
-                    title="Đánh dấu hoàn thành Task"
-                  >
-                    <CheckCircle2 size={13} />
-                    <span className="hidden sm:inline">Xong</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Prominent NEXT Action Badge (Core UX value) */}
-              <div className="mt-2.5 p-2.5 rounded-xl bg-slate-800/90 border border-cyan-500/30 shadow-inner">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-cyan-400 flex items-center gap-1 mb-1">
-                  <Sparkles size={12} className="text-cyan-400" />
-                  Bước tiếp theo (NEXT Action):
-                </div>
-                {activeAction ? (
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-medium text-slate-200 line-clamp-2">
-                      {activeAction.label}
-                    </p>
-                    <button
-                      onClick={handleAdvanceStep}
-                      className="p-1 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 rounded transition-colors shrink-0"
-                      title="Hoàn thành bước này"
-                    >
-                      <CheckCircle2 size={16} />
-                    </button>
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-400 italic">
-                    Chưa có bước tiếp theo. Hãy thêm bước bên dưới!
-                  </p>
-                )}
-
-                {/* Blocker Alert if any */}
-                {latestCheckpoint?.blocker && (
-                  <div className="mt-2 pt-2 border-t border-slate-700/60 flex items-start gap-1.5 text-xs text-amber-300">
-                    <AlertTriangle size={13} className="shrink-0 mt-0.5 text-amber-400" />
-                    <span className="line-clamp-1">{latestCheckpoint.blocker}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            /* Empty Active Task State */
-            <div className="py-4 text-center space-y-2">
-              <p className="text-xs text-slate-400">Hiện chưa có task nào đang Active.</p>
-              <button
-                onClick={() => setQuickCaptureOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold text-xs transition-colors shadow-lg shadow-cyan-500/20"
-              >
-                <Plus size={14} />
-                Tạo Task mới hoặc Ghi Checkpoint
-              </button>
-            </div>
-          )}
-
-          {/* Suggested Resume Banner if there are paused tasks */}
-          {!activeTask && suggestedResume && (
-            <div className="p-2.5 rounded-xl bg-indigo-950/60 border border-indigo-500/40 flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <div className="text-[10px] uppercase font-bold text-indigo-400 flex items-center gap-1">
-                  <RotateCcw size={11} /> Gợi ý tiếp tục (Paused Task)
-                </div>
-                <div className="text-xs font-semibold text-slate-200 truncate">
-                  {suggestedResume.title}
-                </div>
-              </div>
-              <button
-                onClick={() => resumeTask(suggestedResume.id)}
-                className="px-2.5 py-1 rounded bg-indigo-500 hover:bg-indigo-400 text-white font-medium text-xs flex items-center gap-1 transition-colors shrink-0"
-              >
-                <Play size={12} /> Tiếp tục
-              </button>
-            </div>
-          )}
-
-          {/* Expanded Step Timeline List */}
-          {isExpanded && activeTask && (
-            <div className="mt-3 pt-3 border-t border-slate-800 space-y-2">
-              <div className="text-xs font-semibold text-slate-400 flex items-center justify-between">
-                <span>Danh sách các bước ({activeTask.steps.length}):</span>
-                <span className="text-[11px] text-slate-500">1-click đổi trạng thái</span>
-              </div>
-
-              <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
-                {activeTask.steps.map((step) => (
-                  <div
-                    key={step.id}
-                    onClick={() => toggleStepComplete(activeTask.id, step.id)}
-                    className={`flex items-center gap-2 p-1.5 rounded-lg text-xs cursor-pointer transition-all border ${
-                      step.status === 'done'
-                        ? 'bg-slate-900/50 border-emerald-500/20 text-slate-400 line-through'
-                        : step.status === 'current'
-                        ? 'bg-cyan-950/40 border-cyan-500/40 text-cyan-200 font-medium'
-                        : step.status === 'blocked'
-                        ? 'bg-amber-950/40 border-amber-500/30 text-amber-200'
-                        : 'bg-slate-800/40 border-slate-700/50 text-slate-300 hover:border-slate-600'
-                    }`}
-                  >
-                    <span className="shrink-0">
-                      {step.status === 'done' ? (
-                        <CheckCircle2 size={13} className="text-emerald-400" />
-                      ) : step.status === 'current' ? (
-                        <span className="inline-block w-2.5 h-2.5 rounded-full bg-cyan-400 ring-2 ring-cyan-400/30" />
-                      ) : step.status === 'blocked' ? (
-                        <AlertTriangle size={13} className="text-amber-400" />
-                      ) : (
-                        <span className="inline-block w-2.5 h-2.5 rounded-full border border-slate-500" />
-                      )}
-                    </span>
-                    <span className="flex-1 truncate">{step.label}</span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Add Step input */}
-              <form onSubmit={handleAddInlineStep} className="flex items-center gap-1.5 mt-2">
-                <input
-                  type="text"
-                  placeholder="+ Thêm bước tiếp theo..."
-                  value={newStepText}
-                  onChange={(e) => setNewStepText(e.target.value)}
-                  className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500"
-                />
-                <button
-                  type="submit"
-                  disabled={!newStepText.trim()}
-                  className="p-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded-lg text-slate-300 transition-colors"
-                >
-                  <Plus size={13} />
-                </button>
-              </form>
-            </div>
-          )}
-
-          {/* Quick Footer */}
-          <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500">
-            <span className="flex items-center gap-1">
-              <Compass size={11} />
-              {pausedTasks.length > 0 ? `${pausedTasks.length} task đang Pause` : 'Không có task chờ'}
-            </span>
-            <button
-              onClick={() => setQuickCaptureOpen(true)}
-              className="hover:text-cyan-400 transition-colors font-medium"
-            >
-              ⚡ Quick Capture [Ctrl+Alt+Space]
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   )

@@ -40,6 +40,7 @@ export type AppViewMode = 'workspace' | 'dock' | 'spotlight'
 
 export interface DockSettings {
   compact: boolean
+  bubbleMode: boolean
   position: 'top-right' | 'bottom-right' | 'top-left' | 'bottom-left'
   opacity: number
   alwaysOnTop: boolean
@@ -52,4 +53,39 @@ export interface HotkeySettings {
   toggleDock: string
   toggleWorkspace: string
   quickResume: string
+}
+
+export interface ElectronAPI {
+  minimizeWindow: () => void
+  maximizeWindow: () => void
+  closeWindow: () => void
+  hideWindow: () => void
+  setAlwaysOnTop: (flag: boolean) => void
+  setOpacity: (opacity: number) => void
+  setIgnoreMouseEvents: (ignore: boolean, forward?: boolean) => void
+
+  openQuickCapture: () => void
+  closeQuickCapture: () => void
+  resizeQuickCapture: (width: number, height: number) => void
+
+  openWorkspace: () => void
+  hideWorkspace: () => void
+  toggleWorkspace: () => void
+
+  openDock: () => void
+  hideDock: () => void
+  resizeDock: (width: number, height: number) => void
+
+  saveLocalData: (key: string, data: any) => Promise<boolean>
+  loadLocalData: (key: string) => Promise<any>
+
+  onGlobalHotkeyTriggered: (callback: (action: string) => void) => () => void
+  onDataSync: (callback: (data: any) => void) => () => void
+  broadcastDataSync: (data: any) => void
+}
+
+declare global {
+  interface Window {
+    electronAPI?: ElectronAPI
+  }
 }

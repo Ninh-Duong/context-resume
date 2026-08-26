@@ -38,12 +38,16 @@ interface ResumeStoreState {
   setSearchQuery: (query: string) => void
   updateDockSettings: (settings: Partial<DockSettings>) => void
   
+  // Cross-window Sync
+  syncFromRemote: (payload: { tasks: Task[]; activeTaskId: string | null; dockSettings?: DockSettings }) => void
+
   // Data Export/Import
   exportData: () => string
   importData: (jsonStr: string) => boolean
 }
 
 const LOCAL_STORAGE_KEY = 'context_resume_data_v1'
+const SETTINGS_STORAGE_KEY = 'context_resume_settings_v1'
 
 const initialSampleTasks: Task[] = [
   {
@@ -58,8 +62,8 @@ const initialSampleTasks: Task[] = [
         id: 'cp-1',
         taskId: 'task-invoice-api',
         lastCompleted: 'Tạo route & Tạo DTO',
-        nextAction: 'Thêm filter customerId vào query',
-        blocker: 'Chưa có sample response từ frontend',
+        nextAction: 'Thêm filter customerId vào SQL query builder',
+        blocker: 'Chờ mock JSON từ Tuấn Frontend',
         context: 'invoice.service.ts | API documentation',
         createdAt: Date.now() - 1800 * 1000,
       },
@@ -158,15 +162,27 @@ function safeSetStorage(key: string, value: string) {
   } catch {}
 }
 
+function notifyCrossWindowSync(data: any) {
+  try {
+    if (typeof window !== 'undefined' && (window as any).electronAPI?.broadcastDataSync) {
+      ;(window as any).electronAPI.broadcastDataSync(data)
+    }
+  } catch {}
+}
+
 function loadInitialTasks(): { tasks: Task[]; activeTaskId: string | null } {
   try {
     const raw = safeGetStorage(LOCAL_STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw)
       if (Array.isArray(parsed.tasks) && parsed.tasks.length > 0) {
+        const normalizedTasks = parsed.tasks.map((task: Task) => ({
+          ...task,
+          steps: ensureCurrentStep(Array.isArray(task.steps) ? task.steps : []),
+        }))
         return {
-          tasks: parsed.tasks,
-          activeTaskId: parsed.activeTaskId ?? parsed.tasks[0]?.id ?? null,
+          tasks: normalizedTasks,
+          activeTaskId: parsed.activeTaskId ?? normalizedTasks[0]?.id ?? null,
         }
       }
     }
@@ -179,6 +195,55 @@ function loadInitialTasks(): { tasks: Task[]; activeTaskId: string | null } {
   }
 }
 
+function loadInitialDockSettings(): DockSettings {
+  const defaultSettings: DockSettings = {
+    compact: false,
+    bubbleMode: false,
+    position: 'bottom-right',
+    opacity: 0.95,
+    alwaysOnTop: true,
+    clickThrough: false,
+  }
+  try {
+    const raw = safeGetStorage(SETTINGS_STORAGE_KEY)
+    if (raw) {
+      return { ...defaultSettings, ...JSON.parse(raw) }
+    }
+  } catch {}
+  return defaultSettings
+}
+
+function normalizeCurrentStep(steps: Step[], preferredStepId?: string): Step[] {
+  let currentAssigned = false
+
+  return steps.map((step) => {
+    const shouldBeCurrent = preferredStepId
+      ? step.id === preferredStepId
+      : step.status === 'current'
+
+    if (shouldBeCurrent && !currentAssigned) {
+      currentAssigned = true
+      return { ...step, status: 'current' as StepStatus }
+    }
+
+    if (step.status === 'current') {
+      return { ...step, status: 'next' as StepStatus }
+    }
+
+    return step
+  })
+}
+
+function ensureCurrentStep(steps: Step[], excludedStepId?: string): Step[] {
+  const normalized = normalizeCurrentStep(steps)
+  if (normalized.some((step) => step.status === 'current')) return normalized
+
+  const candidate = normalized.find(
+    (step) => step.id !== excludedStepId && (step.status === 'next' || step.status === 'later')
+  )
+  return candidate ? normalizeCurrentStep(normalized, candidate.id) : normalized
+}
+
 const initialData = loadInitialTasks()
 
 export const useResumeStore = create<ResumeStoreState>((set, get) => ({
@@ -187,14 +252,7 @@ export const useResumeStore = create<ResumeStoreState>((set, get) => ({
   currentView: 'workspace',
   isQuickCaptureOpen: false,
   searchQuery: '',
-  
-  dockSettings: {
-    compact: false,
-    position: 'top-right',
-    opacity: 0.95,
-    alwaysOnTop: true,
-    clickThrough: false,
-  },
+  dockSettings: loadInitialDockSettings(),
 
   hotkeySettings: {
     quickCapture: 'Ctrl+Alt+Space',
@@ -234,6 +292,7 @@ export const useResumeStore = create<ResumeStoreState>((set, get) => ({
       )
       const finalTasks = [newTask, ...updatedTasks]
       safeSetStorage(LOCAL_STORAGE_KEY, JSON.stringify({ tasks: finalTasks, activeTaskId: newTaskId }))
+      notifyCrossWindowSync({ tasks: finalTasks, activeTaskId: newTaskId })
       return {
         tasks: finalTasks,
         activeTaskId: newTaskId,
@@ -255,6 +314,7 @@ export const useResumeStore = create<ResumeStoreState>((set, get) => ({
         return t
       })
       safeSetStorage(LOCAL_STORAGE_KEY, JSON.stringify({ tasks: updatedTasks, activeTaskId: taskId }))
+      notifyCrossWindowSync({ tasks: updatedTasks, activeTaskId: taskId })
       return { tasks: updatedTasks, activeTaskId: taskId }
     })
   },
@@ -275,10 +335,41 @@ export const useResumeStore = create<ResumeStoreState>((set, get) => ({
             context: checkpoint.context,
             createdAt: Date.now(),
           }
+
+          // Keep one resumable step even if older data contains multiple current steps.
+          const currentStep = t.steps.find((s) => s.status === 'current')
+          let updatedSteps = normalizeCurrentStep(t.steps, currentStep?.id)
+
+          if (currentStep) {
+            updatedSteps = updatedSteps.map((s) =>
+              s.id === currentStep.id
+                ? {
+                    ...s,
+                    label: checkpoint.nextAction || s.label,
+                    status: 'current' as StepStatus,
+                    note: checkpoint.blocker || s.note,
+                  }
+                : s
+            )
+          }
+
+          // If there was no current step, add the next action as the current step
+          if (!currentStep && checkpoint.nextAction) {
+            updatedSteps.push({
+              id: `step-${Date.now()}`,
+              taskId: t.id,
+              label: checkpoint.nextAction,
+              status: 'current',
+              order: updatedSteps.length,
+              note: checkpoint.blocker,
+            })
+          }
+
           return {
             ...t,
             status: 'paused' as TaskStatus,
             lastPausedAt: Date.now(),
+            steps: updatedSteps,
             checkpoints: [newCp, ...t.checkpoints],
           }
         }
@@ -286,6 +377,7 @@ export const useResumeStore = create<ResumeStoreState>((set, get) => ({
       })
 
       safeSetStorage(LOCAL_STORAGE_KEY, JSON.stringify({ tasks: updatedTasks, activeTaskId: null }))
+      notifyCrossWindowSync({ tasks: updatedTasks, activeTaskId: null })
       return { tasks: updatedTasks, activeTaskId: null }
     })
 
@@ -303,7 +395,11 @@ export const useResumeStore = create<ResumeStoreState>((set, get) => ({
       let nextActiveId: string | null = null
       const updatedTasks = state.tasks.map((t) => {
         if (t.id === taskId) {
-          return { ...t, status: 'completed' as TaskStatus, completedAt: Date.now() }
+          // Mark all unfinished steps as done
+          const finishedSteps = t.steps.map((s) =>
+            s.status !== 'done' ? { ...s, status: 'done' as StepStatus, completedAt: Date.now() } : s
+          )
+          return { ...t, status: 'completed' as TaskStatus, completedAt: Date.now(), steps: finishedSteps }
         }
         return t
       })
@@ -319,10 +415,12 @@ export const useResumeStore = create<ResumeStoreState>((set, get) => ({
           t.id === nextActiveId ? { ...t, status: 'active' as TaskStatus, lastResumedAt: Date.now() } : t
         )
         safeSetStorage(LOCAL_STORAGE_KEY, JSON.stringify({ tasks: finalTasks, activeTaskId: nextActiveId }))
+        notifyCrossWindowSync({ tasks: finalTasks, activeTaskId: nextActiveId })
         return { tasks: finalTasks, activeTaskId: nextActiveId }
       }
 
       safeSetStorage(LOCAL_STORAGE_KEY, JSON.stringify({ tasks: updatedTasks, activeTaskId: null }))
+      notifyCrossWindowSync({ tasks: updatedTasks, activeTaskId: null })
       return { tasks: updatedTasks, activeTaskId: null }
     })
   },
@@ -330,8 +428,26 @@ export const useResumeStore = create<ResumeStoreState>((set, get) => ({
   deleteTask: (taskId: string) => {
     set((state) => {
       const updatedTasks = state.tasks.filter((t) => t.id !== taskId)
-      const nextActiveId = state.activeTaskId === taskId ? null : state.activeTaskId
+      let nextActiveId = state.activeTaskId === taskId ? null : state.activeTaskId
+
+      if (state.activeTaskId === taskId) {
+        const nextTask = updatedTasks
+          .filter((t) => t.status === 'paused')
+          .sort((a, b) => (b.lastPausedAt || 0) - (a.lastPausedAt || 0))[0]
+
+        if (nextTask) {
+          nextActiveId = nextTask.id
+          const resumedTasks = updatedTasks.map((t) =>
+            t.id === nextTask.id ? { ...t, status: 'active' as TaskStatus, lastResumedAt: Date.now() } : t
+          )
+          safeSetStorage(LOCAL_STORAGE_KEY, JSON.stringify({ tasks: resumedTasks, activeTaskId: nextActiveId }))
+          notifyCrossWindowSync({ tasks: resumedTasks, activeTaskId: nextActiveId })
+          return { tasks: resumedTasks, activeTaskId: nextActiveId }
+        }
+      }
+
       safeSetStorage(LOCAL_STORAGE_KEY, JSON.stringify({ tasks: updatedTasks, activeTaskId: nextActiveId }))
+      notifyCrossWindowSync({ tasks: updatedTasks, activeTaskId: nextActiveId })
       return { tasks: updatedTasks, activeTaskId: nextActiveId }
     })
   },
@@ -340,18 +456,24 @@ export const useResumeStore = create<ResumeStoreState>((set, get) => ({
     set((state) => {
       const updatedTasks = state.tasks.map((t) => {
         if (t.id === taskId) {
+          // If adding a current step, reset any existing current step to next
+          const existingSteps = status === 'current'
+            ? t.steps.map((s) => (s.status === 'current' ? { ...s, status: 'next' as StepStatus } : s))
+            : t.steps
+
           const newStep: Step = {
             id: `step-${Date.now()}`,
             taskId,
             label: label.trim(),
             status,
-            order: t.steps.length,
+            order: existingSteps.length,
           }
-          return { ...t, steps: [...t.steps, newStep] }
+          return { ...t, steps: [...existingSteps, newStep] }
         }
         return t
       })
       safeSetStorage(LOCAL_STORAGE_KEY, JSON.stringify({ tasks: updatedTasks, activeTaskId: state.activeTaskId }))
+      notifyCrossWindowSync({ tasks: updatedTasks, activeTaskId: state.activeTaskId })
       return { tasks: updatedTasks }
     })
   },
@@ -360,6 +482,7 @@ export const useResumeStore = create<ResumeStoreState>((set, get) => ({
     set((state) => {
       const updatedTasks = state.tasks.map((t) => {
         if (t.id === taskId) {
+          const wasCurrent = t.steps.some((s) => s.id === stepId && s.status === 'current')
           const updatedSteps = t.steps.map((s) => {
             if (s.id === stepId) {
               return {
@@ -368,17 +491,23 @@ export const useResumeStore = create<ResumeStoreState>((set, get) => ({
                 completedAt: status === 'done' ? Date.now() : undefined,
               }
             }
-            // If setting this step to current, set other current steps to next or later
+            // Enforce single-current constraint
             if (status === 'current' && s.status === 'current') {
-              return { ...s, status: 'later' as StepStatus }
+              return { ...s, status: 'next' as StepStatus }
             }
             return s
           })
-          return { ...t, steps: updatedSteps }
+          return {
+            ...t,
+            steps: status === 'current'
+              ? normalizeCurrentStep(updatedSteps, stepId)
+              : ensureCurrentStep(updatedSteps, wasCurrent ? stepId : undefined),
+          }
         }
         return t
       })
       safeSetStorage(LOCAL_STORAGE_KEY, JSON.stringify({ tasks: updatedTasks, activeTaskId: state.activeTaskId }))
+      notifyCrossWindowSync({ tasks: updatedTasks, activeTaskId: state.activeTaskId })
       return { tasks: updatedTasks }
     })
   },
@@ -388,8 +517,32 @@ export const useResumeStore = create<ResumeStoreState>((set, get) => ({
     const step = task?.steps.find((s) => s.id === stepId)
     if (!step) return
 
-    const newStatus: StepStatus = step.status === 'done' ? 'current' : 'done'
-    get().updateStepStatus(taskId, stepId, newStatus)
+    set((state) => {
+      const updatedTasks = state.tasks.map((t) => {
+        if (t.id === taskId) {
+          const isDoneNow = step.status !== 'done'
+          let updatedSteps = t.steps.map((s) =>
+            s.id === stepId
+              ? {
+                  ...s,
+                  status: (isDoneNow ? 'done' : 'current') as StepStatus,
+                  completedAt: isDoneNow ? Date.now() : undefined,
+                }
+              : s
+          )
+
+          updatedSteps = isDoneNow
+            ? ensureCurrentStep(updatedSteps)
+            : normalizeCurrentStep(updatedSteps, stepId)
+
+          return { ...t, steps: updatedSteps }
+        }
+        return t
+      })
+      safeSetStorage(LOCAL_STORAGE_KEY, JSON.stringify({ tasks: updatedTasks, activeTaskId: state.activeTaskId }))
+      notifyCrossWindowSync({ tasks: updatedTasks, activeTaskId: state.activeTaskId })
+      return { tasks: updatedTasks }
+    })
   },
 
   editStep: (taskId: string, stepId: string, label: string, note?: string) => {
@@ -404,6 +557,7 @@ export const useResumeStore = create<ResumeStoreState>((set, get) => ({
         return t
       })
       safeSetStorage(LOCAL_STORAGE_KEY, JSON.stringify({ tasks: updatedTasks, activeTaskId: state.activeTaskId }))
+      notifyCrossWindowSync({ tasks: updatedTasks, activeTaskId: state.activeTaskId })
       return { tasks: updatedTasks }
     })
   },
@@ -412,11 +566,17 @@ export const useResumeStore = create<ResumeStoreState>((set, get) => ({
     set((state) => {
       const updatedTasks = state.tasks.map((t) => {
         if (t.id === taskId) {
-          return { ...t, steps: t.steps.filter((s) => s.id !== stepId) }
+          const deletedStep = t.steps.find((s) => s.id === stepId)
+          const remainingSteps = t.steps.filter((s) => s.id !== stepId)
+          return {
+            ...t,
+            steps: deletedStep?.status === 'current' ? ensureCurrentStep(remainingSteps) : remainingSteps,
+          }
         }
         return t
       })
       safeSetStorage(LOCAL_STORAGE_KEY, JSON.stringify({ tasks: updatedTasks, activeTaskId: state.activeTaskId }))
+      notifyCrossWindowSync({ tasks: updatedTasks, activeTaskId: state.activeTaskId })
       return { tasks: updatedTasks }
     })
   },
@@ -434,6 +594,7 @@ export const useResumeStore = create<ResumeStoreState>((set, get) => ({
         return t
       })
       safeSetStorage(LOCAL_STORAGE_KEY, JSON.stringify({ tasks: updatedTasks, activeTaskId: state.activeTaskId }))
+      notifyCrossWindowSync({ tasks: updatedTasks, activeTaskId: state.activeTaskId })
       return { tasks: updatedTasks }
     })
   },
@@ -456,6 +617,7 @@ export const useResumeStore = create<ResumeStoreState>((set, get) => ({
         return t
       })
       safeSetStorage(LOCAL_STORAGE_KEY, JSON.stringify({ tasks: updatedTasks, activeTaskId: state.activeTaskId }))
+      notifyCrossWindowSync({ tasks: updatedTasks, activeTaskId: state.activeTaskId })
       return { tasks: updatedTasks }
     })
   },
@@ -482,7 +644,20 @@ export const useResumeStore = create<ResumeStoreState>((set, get) => ({
   setSearchQuery: (query: string) => set({ searchQuery: query }),
   
   updateDockSettings: (settings: Partial<DockSettings>) =>
-    set((state) => ({ dockSettings: { ...state.dockSettings, ...settings } })),
+    set((state) => {
+      const updated = { ...state.dockSettings, ...settings }
+      safeSetStorage(SETTINGS_STORAGE_KEY, JSON.stringify(updated))
+      notifyCrossWindowSync({ tasks: state.tasks, activeTaskId: state.activeTaskId, dockSettings: updated })
+      return { dockSettings: updated }
+    }),
+
+  syncFromRemote: (payload) => {
+    set((state) => ({
+      tasks: payload.tasks ?? state.tasks,
+      activeTaskId: payload.activeTaskId !== undefined ? payload.activeTaskId : state.activeTaskId,
+      dockSettings: payload.dockSettings ? { ...state.dockSettings, ...payload.dockSettings } : state.dockSettings,
+    }))
+  },
 
   exportData: () => {
     const { tasks } = get()
@@ -494,7 +669,8 @@ export const useResumeStore = create<ResumeStoreState>((set, get) => ({
       const parsed = JSON.parse(jsonStr)
       if (Array.isArray(parsed)) {
         set({ tasks: parsed, activeTaskId: parsed[0]?.id || null })
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ tasks: parsed, activeTaskId: parsed[0]?.id || null }))
+        safeSetStorage(LOCAL_STORAGE_KEY, JSON.stringify({ tasks: parsed, activeTaskId: parsed[0]?.id || null }))
+        notifyCrossWindowSync({ tasks: parsed, activeTaskId: parsed[0]?.id || null })
         return true
       }
     } catch (err) {

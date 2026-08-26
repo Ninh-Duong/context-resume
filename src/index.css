@@ -16,6 +16,19 @@
     background: transparent;
     color: #f1f5f9;
   }
+
+  input,
+  textarea,
+  [contenteditable='true'] {
+    user-select: text;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
 }
 
 /* Electron Window Drag Utility */
@@ -25,6 +38,26 @@
 
 .no-drag {
   -webkit-app-region: no-drag;
+}
+
+/* Frosted glass surface used by the desktop note windows. */
+.glass-panel {
+  background:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.78), rgba(15, 23, 42, 0.58)),
+    radial-gradient(circle at 0% 0%, rgba(34, 211, 238, 0.16), transparent 42%),
+    radial-gradient(circle at 100% 100%, rgba(99, 102, 241, 0.14), transparent 40%);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  box-shadow: 0 18px 55px rgba(2, 6, 23, 0.48), 0 0 0 1px rgba(34, 211, 238, 0.06);
+  -webkit-backdrop-filter: blur(24px) saturate(145%);
+  backdrop-filter: blur(24px) saturate(145%);
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid rgba(34, 211, 238, 0.8);
+  outline-offset: 2px;
 }
 
 /* Custom Scrollbar */
